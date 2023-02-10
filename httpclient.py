@@ -112,7 +112,10 @@ class HTTPClient(object):
         return HTTPResponse(int(status), body)
 
     def GET(self, url, args=None):
-        response = self.send_request(GETRequest(url, args))
+        args = args if args is not None else {}
+        request = GETRequest(url, args)
+        request.query = urlencode(args)
+        response = self.send_request(request)
         return response
 
     def POST(self, url, args=None):
