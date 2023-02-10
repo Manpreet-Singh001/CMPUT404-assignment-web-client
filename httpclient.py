@@ -27,19 +27,20 @@ from urllib.parse import urlparse, urlencode
 
 class HTTPRequest:
 
-    def __init__(self, url, method, headers=None, body=''):
+    def __init__(self, url, method, headers=None, body=None):
         parsed_url = urlparse(url)
         self.host = parsed_url.hostname
         self.port = parsed_url.port if parsed_url.port is not None else 80
         self.query = parsed_url.query
-        self.path = parsed_url.path if parsed_url.path is not "" else "/"
-        self.body = urlencode(body)
+        self.path = parsed_url.path if parsed_url.path != "" else "/"
+        self.body = urlencode(body) if body is not None else {}
         self.method = method
         self.headers = headers if headers is not None else {}
         self.headers['Host'] = self.host
         self.headers['Accept'] = 'Accept: */*'
         self.headers['Connection'] = 'close'
         self.headers['Content-Length'] = len(self.body)
+
 
     def create_request(self):
         http_request = f'{self.method} {self.path}?{self.query} HTTP/1.1\r\n'
@@ -51,10 +52,15 @@ class HTTPRequest:
 
 class GETRequest(HTTPRequest):
 
-    def __init__(self, url):
+    def __init__(self, url, body):
         super().__init__(url, 'GET')
 
 
+class POSTRequest(HTTPRequest):
+
+    def __init__(self, url, body):
+        super().__init__(url, 'POST', body=body)
+        self.headers['Content-Type'] = 'application/x-www-form-urlencoded'
 
 
 def help():
@@ -94,8 +100,8 @@ class HTTPClient(object):
         self.close()
         return buffer.decode('utf-8')
 
-    def GET(self, url, args=None):
-        request = GETRequest(url)
+    def send_request(self, request: HTTPRequest):
+
         self.connect(request.host, request.port)
         self.sendall(request.create_request())
         response = self.recvall()
@@ -105,11 +111,13 @@ class HTTPClient(object):
         body = response.split("\r\n\r\n")[-1]
         return HTTPResponse(int(status), body)
 
+    def GET(self, url, args=None):
+        response = self.send_request(GETRequest(url, args))
+        return response
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        response = self.send_request(POSTRequest(url, args))
+        return response
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
