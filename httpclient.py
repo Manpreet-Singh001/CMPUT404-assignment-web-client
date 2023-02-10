@@ -22,55 +22,89 @@ import sys
 import socket
 import re
 # you may use urllib to encode data appropriately
-import urllib.parse
+from urllib.parse import urlparse, urlencode
+
+
+class HTTPRequest:
+
+    def __init__(self, url, method, headers=None, body=''):
+        parsed_url = urlparse(url)
+        self.host = parsed_url.hostname
+        self.port = parsed_url.port if parsed_url.port is not None else 80
+        self.query = parsed_url.query
+        self.path = parsed_url.path if parsed_url.path is not "" else "/"
+        self.body = urlencode(body)
+        self.method = method
+        self.headers = headers if headers is not None else {}
+        self.headers['Host'] = self.host
+        self.headers['Accept'] = 'Accept: */*'
+        self.headers['Connection'] = 'close'
+        self.headers['Content-Length'] = len(self.body)
+
+    def create_request(self):
+        http_request = f'{self.method} {self.path}?{self.query} HTTP/1.1\r\n'
+        for header in self.headers.keys():
+            http_request += f'{header}: {self.headers[header]}\r\n'
+        http_request += f'\r\n{self.body}'
+        return http_request
+
+
+class GETRequest(HTTPRequest):
+
+    def __init__(self, url):
+        super().__init__(url, 'GET')
+
+
+
 
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
+
 
 class HTTPResponse(object):
     def __init__(self, code=200, body=""):
         self.code = code
         self.body = body
 
+
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    # def get_host_port(self,url):
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
         return None
 
-    def get_code(self, data):
-        return None
-
-    def get_headers(self,data):
-        return None
-
-    def get_body(self, data):
-        return None
-    
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
-        
+
     def close(self):
         self.socket.close()
 
     # read everything from the socket
-    def recvall(self, sock):
+    def recvall(self):
         buffer = bytearray()
         done = False
         while not done:
-            part = sock.recv(1024)
+            part = self.socket.recv(1024)
             if (part):
                 buffer.extend(part)
             else:
                 done = not part
+        self.close()
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        request = GETRequest(url)
+        self.connect(request.host, request.port)
+        self.sendall(request.create_request())
+        response = self.recvall()
+        lines = response.split("\r\n")
+
+        status = lines[0].split(" ")[1]
+        body = response.split("\r\n\r\n")[-1]
+        return HTTPResponse(int(status), body)
+
 
     def POST(self, url, args=None):
         code = 500
@@ -79,10 +113,11 @@ class HTTPClient(object):
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
-            return self.POST( url, args )
+            return self.POST(url, args)
         else:
-            return self.GET( url, args )
-    
+            return self.GET(url, args)
+
+
 if __name__ == "__main__":
     client = HTTPClient()
     command = "GET"
@@ -90,6 +125,6 @@ if __name__ == "__main__":
         help()
         sys.exit(1)
     elif (len(sys.argv) == 3):
-        print(client.command( sys.argv[2], sys.argv[1] ))
+        print(client.command(sys.argv[2], sys.argv[1]))
     else:
-        print(client.command( sys.argv[1] ))
+        print(client.command(sys.argv[1]))
